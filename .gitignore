@@ -1,0 +1,17 @@
+# CMake build output
+/build/
+/cmake-build-*/
+
+# Generated virtual disk
+virtual_disk.bin
+
+# IDE settings
+.vscode/
+.idea/
+
+# Compiled binaries and object files
+*.exe
+*.out
+*.o
+*.obj
+
