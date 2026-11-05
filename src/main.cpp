@@ -1,5 +1,3 @@
-
-
 #include "minifs/cli.hpp"
 #include "minifs/virtual_disk.hpp"
 
