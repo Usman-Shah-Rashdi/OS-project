@@ -39,6 +39,15 @@ On Windows with a Visual Studio generator, run the generated executable from
 the corresponding configuration directory, for example
 `build/Debug/minifs.exe`.
 
-The current CLI is the initial project shell. File-system formatting,
-directories, allocation strategies, persistence, recovery, and the visualizer
-will be implemented incrementally.
+The first storage layer is implemented. Use `format` to create a 100 MB disk
+with 4 KB blocks, or provide a size in megabytes:
+
+```text
+minifs> format
+minifs> format 50
+minifs> diskinfo
+```
+
+The CLI can now create, open, and inspect `virtual_disk.bin`. File-system
+metadata, directories, allocation strategies, persistence rules, recovery, and
+the visualizer will be implemented incrementally.

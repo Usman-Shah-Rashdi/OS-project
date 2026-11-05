@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(minifs
     src/main.cpp
+    src/virtual_disk.cpp
 )
 
 target_include_directories(minifs
@@ -20,4 +21,3 @@ if (MSVC)
 else()
     target_compile_options(minifs PRIVATE -Wall -Wextra -Wpedantic)
 endif()
-
