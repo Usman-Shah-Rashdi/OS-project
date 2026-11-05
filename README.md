@@ -39,15 +39,40 @@ On Windows with a Visual Studio generator, run the generated executable from
 the corresponding configuration directory, for example
 `build/Debug/minifs.exe`.
 
-The first storage layer is implemented. Use `format` to create a 100 MB disk
-with 4 KB blocks, or provide a size in megabytes:
+Run the unit tests:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+## Disk layout
+
+`format` creates a 100 MB disk with 4 KB blocks (or a size given in MB) and
+lays it out as:
+
+```text
+| Block 0    | Blocks 1..B | Next I blocks | Remaining blocks |
+| Superblock | Free bitmap | Inode table   | Data blocks      |
+```
+
+- **Superblock**: magic `MNFS`, version, block size, block count, the start
+  and length of every region, free block/inode counts, root inode, and
+  allocation mode.
+- **Free bitmap**: one bit per block, 1 = used. Metadata blocks are marked
+  used at format time.
+- **Inode table**: 128-byte inodes (type, permissions, size, timestamps,
+  10 direct pointers, 1 indirect pointer). One inode for every 4 blocks.
+  Inode 0 is reserved; inode 1 is the root directory.
+- **Data blocks**: file and directory contents. Directories are arrays of
+  64-byte entries (inode number + 60-byte name).
+
+The structs live in `include/minifs/fs_types.hpp`.
 
 ```text
 minifs> format
-minifs> format 50
 minifs> diskinfo
 ```
 
-The CLI can now create, open, and inspect `virtual_disk.bin`. File-system
-metadata, directories, allocation strategies, persistence rules, recovery, and
-the visualizer will be implemented incrementally.
+The disk is mounted automatically when MiniFS starts. Directory commands,
+file operations, allocation strategies, recovery, and the visualizer will be
+implemented incrementally.
