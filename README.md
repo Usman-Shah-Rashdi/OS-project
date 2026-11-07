@@ -71,8 +71,12 @@ The structs live in `include/minifs/fs_types.hpp`.
 ```text
 minifs> format
 minifs> diskinfo
+minifs> pwd
+minifs> mkdir /a
+minifs> cd /a
+minifs> ls /
 ```
 
-The disk is mounted automatically when MiniFS starts. Directory commands,
-file operations, allocation strategies, recovery, and the visualizer will be
-implemented incrementally.
+The disk is mounted automatically when MiniFS starts. Path resolution supports
+absolute and relative paths, `.`, and `..`. File commands, deletion, recovery,
+allocation strategies, and the visualizer will be implemented incrementally.
