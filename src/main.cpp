@@ -39,6 +39,10 @@ void print_help(ostream& output) {
            << "  version    Show the MiniFS version\n"
            << "  format [MB] Create or reset virtual_disk.bin (default: 100 MB)\n"
            << "  diskinfo   Show the disk layout and free space\n"
+           << "  pwd        Print the current directory\n"
+           << "  cd <path>  Change the current directory\n"
+           << "  ls [path]  List a directory\n"
+           << "  mkdir <path> Create a directory\n"
            << "  exit       Exit MiniFS\n";
 }
 
@@ -135,6 +139,32 @@ void Cli::run(istream& input, ostream& output) {
                     fs.mount();
                 }
                 print_disk_info(fs, output);
+            } else if (name == "pwd") {
+                output << fs.working_directory_path() << '\n';
+            } else if (name == "cd") {
+                string path;
+                if (!(command_stream >> path)) {
+                    throw invalid_argument("Usage: cd <path>");
+                }
+                fs.change_directory(path);
+            } else if (name == "ls") {
+                string path;
+                command_stream >> path;
+                const uint32_t directory =
+                    path.empty() ? fs.current_directory() : fs.resolve_path(path);
+                for (const DirEntry& entry : fs.list_directory(directory)) {
+                    if (entry.inode != kNullInode &&
+                        string(entry.name) != "." &&
+                        string(entry.name) != "..") {
+                        output << entry.name << '\n';
+                    }
+                }
+            } else if (name == "mkdir") {
+                string path;
+                if (!(command_stream >> path)) {
+                    throw invalid_argument("Usage: mkdir <path>");
+                }
+                fs.make_directory(path);
             } else if (name == "exit" || name == "quit") {
                 break;
             } else if (!name.empty()) {

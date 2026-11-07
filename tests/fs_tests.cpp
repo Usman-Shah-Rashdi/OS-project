@@ -275,6 +275,46 @@ void test_large_disk_layout() {
     CHECK(fs.superblock().free_block_count == sb.data_block_count - 1);
 }
 
+void test_directories_and_paths() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+
+    CHECK(fs.working_directory_path() == "/");
+    const uint32_t a = fs.make_directory("/a");
+    const uint32_t b = fs.make_directory("/a/b");
+    CHECK(fs.resolve_path("/a") == a);
+    CHECK(fs.resolve_path("/a/b") == b);
+    CHECK(fs.resolve_path("/a/./b") == b);
+    CHECK(fs.resolve_path("/a/b/..") == a);
+    CHECK(fs.directory_empty(b));
+
+    fs.change_directory("/a/b");
+    CHECK(fs.current_directory() == b);
+    CHECK(fs.working_directory_path() == "/a/b");
+    CHECK(fs.resolve_path(".") == b);
+    CHECK(fs.resolve_path("../..") == kRootInode);
+    CHECK(fs.resolve_path("../../a") == a);
+
+    CHECK(throws<logic_error>([&] { fs.make_directory("/a"); }));
+    CHECK(throws<out_of_range>([&] { fs.resolve_path("/missing"); }));
+    CHECK(throws<invalid_argument>([&] {
+        fs.add_directory_entry(b, string(60, 'x'), a);
+    }));
+
+    const uint32_t file = fs.allocate_inode(InodeType::File, 0644);
+    fs.add_directory_entry(b, "file", file);
+    CHECK(!fs.directory_empty(a));
+    CHECK(fs.resolve_path("/a/b/file") == file);
+    CHECK(throws<logic_error>([&] { fs.resolve_path("/a/b/file/child"); }));
+    fs.remove_directory_entry(b, "file");
+    CHECK(fs.directory_empty(b));
+
+    fs.unmount();
+    fs.mount();
+    CHECK(fs.resolve_path("/a/b") == b);
+}
+
 } // namespace
 
 int main() {
@@ -288,6 +328,7 @@ int main() {
         {"mount rejects bad disks", test_mount_rejects_bad_disks},
         {"format rejects tiny disk", test_format_rejects_tiny_disk},
         {"100 MB layout", test_large_disk_layout},
+        {"directories and paths", test_directories_and_paths},
     };
 
     for (const auto& test : tests) {
