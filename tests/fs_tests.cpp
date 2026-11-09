@@ -393,6 +393,46 @@ void test_read_file() {
     CHECK(throws<out_of_range>([&] { fs.read_file("/missing"); }));
 }
 
+void test_remove_file() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+    const uint32_t file = fs.create_file("/file");
+    fs.write_file("/file", string(4097, 'x'));
+    const uint32_t first_block = fs.read_inode(file).direct[0];
+    const uint32_t free_blocks = fs.superblock().free_block_count;
+
+    fs.remove_file("/file");
+    CHECK(throws<out_of_range>([&] { fs.resolve_path("/file"); }));
+    CHECK(fs.read_inode(file).type == static_cast<uint16_t>(InodeType::Free));
+    CHECK(!fs.is_block_used(first_block));
+    CHECK(fs.superblock().free_block_count == free_blocks + 2);
+    CHECK(throws<logic_error>([&] { fs.remove_file("/"); }));
+    CHECK(throws<out_of_range>([&] { fs.remove_file("/missing"); }));
+}
+
+void test_remove_directory() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+    const uint32_t parent = fs.make_directory("/parent");
+    const uint32_t directory = fs.make_directory("/parent/child");
+    const uint32_t block = fs.read_inode(directory).direct[0];
+    const uint32_t free_blocks = fs.superblock().free_block_count;
+
+    fs.remove_directory("/parent/child");
+    CHECK(throws<out_of_range>([&] { fs.resolve_path("/parent/child"); }));
+    CHECK(fs.read_inode(directory).type == static_cast<uint16_t>(InodeType::Free));
+    CHECK(!fs.is_block_used(block));
+    CHECK(fs.superblock().free_block_count == free_blocks + 1);
+    CHECK(fs.read_inode(parent).link_count == 2);
+
+    fs.create_file("/parent/file");
+    CHECK(throws<logic_error>([&] { fs.remove_directory("/parent"); }));
+    CHECK(throws<logic_error>([&] { fs.remove_directory("/parent/file"); }));
+    CHECK(throws<invalid_argument>([&] { fs.remove_directory("/"); }));
+}
+
 } // namespace
 
 int main() {
@@ -410,6 +450,8 @@ int main() {
         {"create file", test_create_file},
         {"write file", test_write_file},
         {"read file", test_read_file},
+        {"remove file", test_remove_file},
+        {"remove directory", test_remove_directory},
     };
 
     for (const auto& test : tests) {

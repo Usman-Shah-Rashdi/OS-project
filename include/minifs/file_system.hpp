@@ -73,6 +73,8 @@ public:
     uint32_t create_file(const string& path, uint16_t mode = 0644);
     void write_file(const string& path, const string& content);
     string read_file(const string& path);
+    void remove_file(const string& path);
+    void remove_directory(const string& path);
 
 private:
     void create_root_directory();

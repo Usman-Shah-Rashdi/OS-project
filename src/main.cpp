@@ -47,6 +47,8 @@ void print_help(ostream& output) {
            << "  touch <path> Create an empty file\n"
            << "  write <path> <text> Write text to a file\n"
            << "  cat <path>  Print file contents\n"
+           << "  rm <path>   Remove a file\n"
+           << "  rmdir <path> Remove an empty directory\n"
            << "  exit       Exit MiniFS\n";
 }
 
@@ -188,6 +190,18 @@ void Cli::run(istream& input, ostream& output) {
                     throw invalid_argument("Usage: cat <path>");
                 }
                 output << fs.read_file(path) << '\n';
+            } else if (name == "rm") {
+                string path;
+                if (!(command_stream >> path)) {
+                    throw invalid_argument("Usage: rm <path>");
+                }
+                fs.remove_file(path);
+            } else if (name == "rmdir") {
+                string path;
+                if (!(command_stream >> path)) {
+                    throw invalid_argument("Usage: rmdir <path>");
+                }
+                fs.remove_directory(path);
             } else if (name == "exit" || name == "quit") {
                 break;
             } else if (!name.empty()) {

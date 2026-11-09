@@ -475,6 +475,52 @@ string FileSystem::read_file(const string& path) {
     return content;
 }
 
+void FileSystem::remove_file(const string& path) {
+    const uint32_t file = resolve_path(path);
+    Inode inode = read_inode(file);
+    if (inode.type != static_cast<uint16_t>(InodeType::File)) {
+        throw logic_error("Path '" + path + "' is not a regular file.");
+    }
+
+    const ParentPath parent = resolve_parent(path);
+    remove_directory_entry(parent.inode, parent.name);
+    for (uint32_t block : inode.direct) {
+        if (block != kNullBlock) {
+            free_block(block);
+        }
+    }
+    free_inode(file);
+}
+
+void FileSystem::remove_directory(const string& path) {
+    const uint32_t directory = resolve_path(path);
+    if (directory == kRootInode || directory == current_directory_) {
+        throw invalid_argument("Cannot remove the root or current directory.");
+    }
+
+    const Inode inode = read_inode(directory);
+    if (inode.type != static_cast<uint16_t>(InodeType::Directory)) {
+        throw logic_error("Path '" + path + "' is not a directory.");
+    }
+    if (!directory_empty(directory)) {
+        throw logic_error("Directory '" + path + "' is not empty.");
+    }
+
+    const ParentPath parent = resolve_parent(path);
+    remove_directory_entry(parent.inode, parent.name);
+    Inode parent_inode = read_inode(parent.inode);
+    if (parent_inode.link_count > 0) {
+        --parent_inode.link_count;
+        write_inode(parent.inode, parent_inode);
+    }
+    for (uint32_t block : inode.direct) {
+        if (block != kNullBlock) {
+            free_block(block);
+        }
+    }
+    free_inode(directory);
+}
+
 void FileSystem::create_root_directory() {
     const uint32_t root = allocate_inode(InodeType::Directory, 0755);
     if (root != kRootInode) {
