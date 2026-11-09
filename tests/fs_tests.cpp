@@ -315,6 +315,71 @@ void test_directories_and_paths() {
     CHECK(fs.resolve_path("/a/b") == b);
 }
 
+void test_create_file() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+
+    const uint32_t directory = fs.make_directory("/a");
+    const uint32_t file = fs.create_file("/a/file");
+    const Inode inode = fs.read_inode(file);
+    CHECK(inode.type == static_cast<uint16_t>(InodeType::File));
+    CHECK(inode.mode == 0644);
+    CHECK(inode.size == 0);
+    CHECK(fs.resolve_path("/a/file") == file);
+    CHECK(!fs.directory_empty(directory));
+
+    CHECK(throws<logic_error>([&] { fs.create_file("/a/file"); }));
+    CHECK(throws<out_of_range>([&] { fs.create_file("/missing/file"); }));
+    CHECK(throws<logic_error>([&] { fs.create_file("/a/file/child"); }));
+
+    fs.unmount();
+    fs.mount();
+    CHECK(fs.resolve_path("/a/file") == file);
+    CHECK(fs.read_inode(file).size == 0);
+}
+
+void test_write_file() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+
+    const uint32_t file = fs.create_file("/file");
+    const string content(4096, 'x');
+    fs.write_file("/file", content);
+    Inode inode = fs.read_inode(file);
+    CHECK(inode.size == content.size());
+    CHECK(inode.direct[0] != kNullBlock);
+    CHECK(inode.direct[1] == kNullBlock);
+
+    vector<uint8_t> data = fs.read_data_block(inode.direct[0]);
+    CHECK(data == vector<uint8_t>(content.begin(), content.end()));
+
+    fs.write_file("/file", "hello");
+    inode = fs.read_inode(file);
+    CHECK(inode.size == 5);
+    CHECK(inode.direct[1] == kNullBlock);
+    data = fs.read_data_block(inode.direct[0]);
+    CHECK(string(data.begin(), data.begin() + 5) == "hello");
+
+    fs.write_file("/file", "");
+    inode = fs.read_inode(file);
+    CHECK(inode.size == 0);
+    CHECK(inode.direct[0] == kNullBlock);
+    CHECK(fs.superblock().free_block_count == fs.superblock().data_block_count - 1);
+
+    CHECK(throws<logic_error>([&] { fs.write_file("/", "data"); }));
+    CHECK(throws<out_of_range>([&] { fs.write_file("/missing", "data"); }));
+
+    fs.write_file("/file", "persistent");
+    fs.unmount();
+    fs.mount();
+    inode = fs.read_inode(file);
+    CHECK(inode.size == 10);
+    data = fs.read_data_block(inode.direct[0]);
+    CHECK(string(data.begin(), data.begin() + 10) == "persistent");
+}
+
 } // namespace
 
 int main() {
@@ -329,6 +394,8 @@ int main() {
         {"format rejects tiny disk", test_format_rejects_tiny_disk},
         {"100 MB layout", test_large_disk_layout},
         {"directories and paths", test_directories_and_paths},
+        {"create file", test_create_file},
+        {"write file", test_write_file},
     };
 
     for (const auto& test : tests) {

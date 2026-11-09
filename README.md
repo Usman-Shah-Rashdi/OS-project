@@ -75,8 +75,11 @@ minifs> pwd
 minifs> mkdir /a
 minifs> cd /a
 minifs> ls /
+minifs> touch /a/file
+minifs> write /a/file "Hello MiniFS"
 ```
 
 The disk is mounted automatically when MiniFS starts. Path resolution supports
-absolute and relative paths, `.`, and `..`. File commands, deletion, recovery,
+absolute and relative paths, `.`, and `..`. The `touch` command creates empty
+files, and `write` replaces a file's contents. Other file commands, deletion, recovery,
 allocation strategies, and the visualizer will be implemented incrementally.

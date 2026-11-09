@@ -374,6 +374,80 @@ uint32_t FileSystem::make_directory(const string& path, uint16_t mode) {
     }
 }
 
+uint32_t FileSystem::create_file(const string& path, uint16_t mode) {
+    const ParentPath parent = resolve_parent(path);
+    const vector<DirEntry> existing = read_directory_entries(parent.inode);
+    if (any_of(existing.begin(), existing.end(),
+               [&parent](const DirEntry& entry) {
+                   return entry.inode != kNullInode &&
+                          string(entry.name) == parent.name;
+               })) {
+        throw logic_error("Entry '" + parent.name + "' already exists.");
+    }
+
+    const uint32_t file = allocate_inode(InodeType::File, mode);
+    try {
+        add_directory_entry(parent.inode, parent.name, file);
+    } catch (const exception&) {
+        free_inode(file);
+        throw;
+    }
+    return file;
+}
+
+void FileSystem::write_file(const string& path, const string& content) {
+    const uint32_t number = resolve_path(path);
+    Inode inode = read_inode(number);
+    if (inode.type != static_cast<uint16_t>(InodeType::File)) {
+        throw logic_error("Path '" + path + "' is not a regular file.");
+    }
+
+    const size_t block_size = sb_.block_size;
+    const size_t required_blocks =
+        (content.size() + block_size - 1) / block_size;
+    if (required_blocks > kDirectPointers) {
+        throw invalid_argument("File is too large for its direct pointers.");
+    }
+
+    vector<uint32_t> new_blocks;
+    try {
+        new_blocks.reserve(required_blocks);
+        for (size_t i = 0; i < required_blocks; ++i) {
+            const uint32_t block = allocate_block();
+            new_blocks.push_back(block);
+
+            const size_t offset = i * block_size;
+            const size_t length = min(block_size, content.size() - offset);
+            vector<uint8_t> data(block_size, 0);
+            memcpy(data.data(), content.data() + offset, length);
+            write_data_block(block, data);
+        }
+    } catch (const exception&) {
+        for (const uint32_t block : new_blocks) {
+            free_block(block);
+        }
+        throw;
+    }
+
+    vector<uint32_t> old_blocks;
+    for (uint32_t& pointer : inode.direct) {
+        if (pointer != kNullBlock) {
+            old_blocks.push_back(pointer);
+            pointer = kNullBlock;
+        }
+    }
+    for (size_t i = 0; i < new_blocks.size(); ++i) {
+        inode.direct[i] = new_blocks[i];
+    }
+    inode.size = content.size();
+    inode.modified_at = static_cast<int64_t>(time(nullptr));
+    write_inode(number, inode);
+
+    for (const uint32_t block : old_blocks) {
+        free_block(block);
+    }
+}
+
 void FileSystem::create_root_directory() {
     const uint32_t root = allocate_inode(InodeType::Directory, 0755);
     if (root != kRootInode) {
