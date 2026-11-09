@@ -49,6 +49,7 @@ void print_help(ostream& output) {
            << "  cat <path>  Print file contents\n"
            << "  rm <path>   Remove a file\n"
            << "  rmdir <path> Remove an empty directory\n"
+           << "  rename <old> <new> Rename or move an entry\n"
            << "  exit       Exit MiniFS\n";
 }
 
@@ -202,6 +203,13 @@ void Cli::run(istream& input, ostream& output) {
                     throw invalid_argument("Usage: rmdir <path>");
                 }
                 fs.remove_directory(path);
+            } else if (name == "rename") {
+                string old_path;
+                string new_path;
+                if (!(command_stream >> old_path >> new_path)) {
+                    throw invalid_argument("Usage: rename <old> <new>");
+                }
+                fs.rename_entry(old_path, new_path);
             } else if (name == "exit" || name == "quit") {
                 break;
             } else if (!name.empty()) {

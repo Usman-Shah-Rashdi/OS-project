@@ -75,6 +75,7 @@ public:
     string read_file(const string& path);
     void remove_file(const string& path);
     void remove_directory(const string& path);
+    void rename_entry(const string& old_path, const string& new_path);
 
 private:
     void create_root_directory();

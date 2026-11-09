@@ -433,6 +433,35 @@ void test_remove_directory() {
     CHECK(throws<invalid_argument>([&] { fs.remove_directory("/"); }));
 }
 
+void test_rename_entry() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+    const uint32_t source_dir = fs.make_directory("/source");
+    const uint32_t destination_dir = fs.make_directory("/destination");
+    const uint32_t file = fs.create_file("/source/file");
+    fs.write_file("/source/file", "data");
+
+    fs.rename_entry("/source/file", "/destination/renamed");
+    CHECK(throws<out_of_range>([&] { fs.resolve_path("/source/file"); }));
+    CHECK(fs.resolve_path("/destination/renamed") == file);
+    CHECK(fs.read_file("/destination/renamed") == "data");
+
+    fs.rename_entry("/destination/renamed", "/destination/final");
+    CHECK(fs.resolve_path("/destination/final") == file);
+    CHECK(throws<logic_error>(
+        [&] { fs.rename_entry("/destination/final", "/source"); }));
+
+    const uint32_t child = fs.make_directory("/source/child");
+    fs.rename_entry("/source/child", "/destination/moved");
+    CHECK(fs.resolve_path("/destination/moved") == child);
+    CHECK(fs.resolve_path("/destination/moved/..") == destination_dir);
+    CHECK(fs.read_inode(source_dir).link_count == 2);
+    CHECK(fs.read_inode(destination_dir).link_count == 3);
+    CHECK(throws<invalid_argument>(
+        [&] { fs.rename_entry("/destination", "/destination/nested"); }));
+}
+
 } // namespace
 
 int main() {
@@ -452,6 +481,7 @@ int main() {
         {"read file", test_read_file},
         {"remove file", test_remove_file},
         {"remove directory", test_remove_directory},
+        {"rename entry", test_rename_entry},
     };
 
     for (const auto& test : tests) {

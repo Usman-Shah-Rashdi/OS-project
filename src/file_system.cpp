@@ -521,6 +521,84 @@ void FileSystem::remove_directory(const string& path) {
     free_inode(directory);
 }
 
+void FileSystem::rename_entry(const string& old_path, const string& new_path) {
+    const uint32_t entry_inode = resolve_path(old_path);
+    if (entry_inode == kRootInode) {
+        throw invalid_argument("Cannot rename the root directory.");
+    }
+
+    const ParentPath source = resolve_parent(old_path);
+    const ParentPath destination = resolve_parent(new_path);
+    validate_entry_name(destination.name);
+    if (source.inode == destination.inode && source.name == destination.name) {
+        return;
+    }
+    const vector<DirEntry> destination_entries =
+        read_directory_entries(destination.inode);
+    if (any_of(destination_entries.begin(), destination_entries.end(),
+               [&destination](const DirEntry& entry) {
+                   return entry.inode != kNullInode &&
+                          string(entry.name) == destination.name;
+               })) {
+        throw logic_error("Entry '" + destination.name + "' already exists.");
+    }
+
+    const Inode inode = read_inode(entry_inode);
+    if (inode.type == static_cast<uint16_t>(InodeType::Directory)) {
+        for (uint32_t current = destination.inode;;) {
+            if (current == entry_inode) {
+                throw invalid_argument("Cannot move a directory into itself.");
+            }
+            if (current == kRootInode) {
+                break;
+            }
+            current = find_directory_entry_in(current, "..");
+        }
+    }
+
+    if (source.inode == destination.inode) {
+        vector<DirEntry> entries = read_directory_entries(source.inode);
+        for (DirEntry& entry : entries) {
+            if (entry.inode == entry_inode &&
+                string(entry.name) == source.name) {
+                memset(entry.name, 0, sizeof(entry.name));
+                memcpy(entry.name, destination.name.data(),
+                       destination.name.size());
+                update_directory(source.inode, entries);
+                return;
+            }
+        }
+        throw FsError("Source directory entry is missing.");
+    }
+
+    add_directory_entry(destination.inode, destination.name, entry_inode);
+    try {
+        remove_directory_entry(source.inode, source.name);
+    } catch (...) {
+        remove_directory_entry(destination.inode, destination.name);
+        throw;
+    }
+
+    if (inode.type == static_cast<uint16_t>(InodeType::Directory)) {
+        vector<DirEntry> entries = read_directory_entries(entry_inode);
+        for (DirEntry& entry : entries) {
+            if (string(entry.name) == "..") {
+                entry.inode = destination.inode;
+                update_directory(entry_inode, entries);
+                break;
+            }
+        }
+        Inode source_inode = read_inode(source.inode);
+        Inode destination_inode = read_inode(destination.inode);
+        if (source_inode.link_count > 0) {
+            --source_inode.link_count;
+        }
+        ++destination_inode.link_count;
+        write_inode(source.inode, source_inode);
+        write_inode(destination.inode, destination_inode);
+    }
+}
+
 void FileSystem::create_root_directory() {
     const uint32_t root = allocate_inode(InodeType::Directory, 0755);
     if (root != kRootInode) {
