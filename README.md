@@ -77,9 +77,10 @@ minifs> cd /a
 minifs> ls /
 minifs> touch /a/file
 minifs> write /a/file "Hello MiniFS"
+minifs> cat /a/file
 ```
 
 The disk is mounted automatically when MiniFS starts. Path resolution supports
 absolute and relative paths, `.`, and `..`. The `touch` command creates empty
-files, and `write` replaces a file's contents. Other file commands, deletion, recovery,
+files, `write` replaces a file's contents, and `cat` prints file contents. Other file commands, deletion, recovery,
 allocation strategies, and the visualizer will be implemented incrementally.

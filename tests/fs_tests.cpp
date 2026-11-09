@@ -380,6 +380,19 @@ void test_write_file() {
     CHECK(string(data.begin(), data.begin() + 10) == "persistent");
 }
 
+void test_read_file() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+    fs.create_file("/file");
+
+    CHECK(fs.read_file("/file").empty());
+    fs.write_file("/file", string(4097, 'x'));
+    CHECK(fs.read_file("/file") == string(4097, 'x'));
+    CHECK(throws<logic_error>([&] { fs.read_file("/"); }));
+    CHECK(throws<out_of_range>([&] { fs.read_file("/missing"); }));
+}
+
 } // namespace
 
 int main() {
@@ -396,6 +409,7 @@ int main() {
         {"directories and paths", test_directories_and_paths},
         {"create file", test_create_file},
         {"write file", test_write_file},
+        {"read file", test_read_file},
     };
 
     for (const auto& test : tests) {

@@ -448,6 +448,33 @@ void FileSystem::write_file(const string& path, const string& content) {
     }
 }
 
+string FileSystem::read_file(const string& path) {
+    const Inode inode = read_inode(resolve_path(path));
+    if (inode.type != static_cast<uint16_t>(InodeType::File)) {
+        throw logic_error("Path '" + path + "' is not a regular file.");
+    }
+
+    string content;
+    content.reserve(static_cast<size_t>(inode.size));
+    size_t remaining = static_cast<size_t>(inode.size);
+    for (uint32_t block : inode.direct) {
+        if (remaining == 0) {
+            break;
+        }
+        if (block == kNullBlock) {
+            throw FsError("File inode has a missing data block.");
+        }
+        const vector<uint8_t> data = read_data_block(block);
+        const size_t count = min(remaining, data.size());
+        content.append(reinterpret_cast<const char*>(data.data()), count);
+        remaining -= count;
+    }
+    if (remaining != 0) {
+        throw FsError("File inode has too few data blocks.");
+    }
+    return content;
+}
+
 void FileSystem::create_root_directory() {
     const uint32_t root = allocate_inode(InodeType::Directory, 0755);
     if (root != kRootInode) {

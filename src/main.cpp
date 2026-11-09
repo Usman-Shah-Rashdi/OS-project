@@ -46,6 +46,7 @@ void print_help(ostream& output) {
            << "  mkdir <path> Create a directory\n"
            << "  touch <path> Create an empty file\n"
            << "  write <path> <text> Write text to a file\n"
+           << "  cat <path>  Print file contents\n"
            << "  exit       Exit MiniFS\n";
 }
 
@@ -181,6 +182,12 @@ void Cli::run(istream& input, ostream& output) {
                     throw invalid_argument("Usage: write <path> \"<text>\"");
                 }
                 fs.write_file(path, content);
+            } else if (name == "cat") {
+                string path;
+                if (!(command_stream >> path)) {
+                    throw invalid_argument("Usage: cat <path>");
+                }
+                output << fs.read_file(path) << '\n';
             } else if (name == "exit" || name == "quit") {
                 break;
             } else if (!name.empty()) {
