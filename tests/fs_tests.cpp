@@ -315,6 +315,153 @@ void test_directories_and_paths() {
     CHECK(fs.resolve_path("/a/b") == b);
 }
 
+void test_create_file() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+
+    const uint32_t directory = fs.make_directory("/a");
+    const uint32_t file = fs.create_file("/a/file");
+    const Inode inode = fs.read_inode(file);
+    CHECK(inode.type == static_cast<uint16_t>(InodeType::File));
+    CHECK(inode.mode == 0644);
+    CHECK(inode.size == 0);
+    CHECK(fs.resolve_path("/a/file") == file);
+    CHECK(!fs.directory_empty(directory));
+
+    CHECK(throws<logic_error>([&] { fs.create_file("/a/file"); }));
+    CHECK(throws<out_of_range>([&] { fs.create_file("/missing/file"); }));
+    CHECK(throws<logic_error>([&] { fs.create_file("/a/file/child"); }));
+
+    fs.unmount();
+    fs.mount();
+    CHECK(fs.resolve_path("/a/file") == file);
+    CHECK(fs.read_inode(file).size == 0);
+}
+
+void test_write_file() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+
+    const uint32_t file = fs.create_file("/file");
+    const string content(4096, 'x');
+    fs.write_file("/file", content);
+    Inode inode = fs.read_inode(file);
+    CHECK(inode.size == content.size());
+    CHECK(inode.direct[0] != kNullBlock);
+    CHECK(inode.direct[1] == kNullBlock);
+
+    vector<uint8_t> data = fs.read_data_block(inode.direct[0]);
+    CHECK(data == vector<uint8_t>(content.begin(), content.end()));
+
+    fs.write_file("/file", "hello");
+    inode = fs.read_inode(file);
+    CHECK(inode.size == 5);
+    CHECK(inode.direct[1] == kNullBlock);
+    data = fs.read_data_block(inode.direct[0]);
+    CHECK(string(data.begin(), data.begin() + 5) == "hello");
+
+    fs.write_file("/file", "");
+    inode = fs.read_inode(file);
+    CHECK(inode.size == 0);
+    CHECK(inode.direct[0] == kNullBlock);
+    CHECK(fs.superblock().free_block_count == fs.superblock().data_block_count - 1);
+
+    CHECK(throws<logic_error>([&] { fs.write_file("/", "data"); }));
+    CHECK(throws<out_of_range>([&] { fs.write_file("/missing", "data"); }));
+
+    fs.write_file("/file", "persistent");
+    fs.unmount();
+    fs.mount();
+    inode = fs.read_inode(file);
+    CHECK(inode.size == 10);
+    data = fs.read_data_block(inode.direct[0]);
+    CHECK(string(data.begin(), data.begin() + 10) == "persistent");
+}
+
+void test_read_file() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+    fs.create_file("/file");
+
+    CHECK(fs.read_file("/file").empty());
+    fs.write_file("/file", string(4097, 'x'));
+    CHECK(fs.read_file("/file") == string(4097, 'x'));
+    CHECK(throws<logic_error>([&] { fs.read_file("/"); }));
+    CHECK(throws<out_of_range>([&] { fs.read_file("/missing"); }));
+}
+
+void test_remove_file() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+    const uint32_t file = fs.create_file("/file");
+    fs.write_file("/file", string(4097, 'x'));
+    const uint32_t first_block = fs.read_inode(file).direct[0];
+    const uint32_t free_blocks = fs.superblock().free_block_count;
+
+    fs.remove_file("/file");
+    CHECK(throws<out_of_range>([&] { fs.resolve_path("/file"); }));
+    CHECK(fs.read_inode(file).type == static_cast<uint16_t>(InodeType::Free));
+    CHECK(!fs.is_block_used(first_block));
+    CHECK(fs.superblock().free_block_count == free_blocks + 2);
+    CHECK(throws<logic_error>([&] { fs.remove_file("/"); }));
+    CHECK(throws<out_of_range>([&] { fs.remove_file("/missing"); }));
+}
+
+void test_remove_directory() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+    const uint32_t parent = fs.make_directory("/parent");
+    const uint32_t directory = fs.make_directory("/parent/child");
+    const uint32_t block = fs.read_inode(directory).direct[0];
+    const uint32_t free_blocks = fs.superblock().free_block_count;
+
+    fs.remove_directory("/parent/child");
+    CHECK(throws<out_of_range>([&] { fs.resolve_path("/parent/child"); }));
+    CHECK(fs.read_inode(directory).type == static_cast<uint16_t>(InodeType::Free));
+    CHECK(!fs.is_block_used(block));
+    CHECK(fs.superblock().free_block_count == free_blocks + 1);
+    CHECK(fs.read_inode(parent).link_count == 2);
+
+    fs.create_file("/parent/file");
+    CHECK(throws<logic_error>([&] { fs.remove_directory("/parent"); }));
+    CHECK(throws<logic_error>([&] { fs.remove_directory("/parent/file"); }));
+    CHECK(throws<invalid_argument>([&] { fs.remove_directory("/"); }));
+}
+
+void test_rename_entry() {
+    VirtualDisk disk(kDiskPath);
+    FileSystem fs(disk);
+    fs.format(kOneMb);
+    const uint32_t source_dir = fs.make_directory("/source");
+    const uint32_t destination_dir = fs.make_directory("/destination");
+    const uint32_t file = fs.create_file("/source/file");
+    fs.write_file("/source/file", "data");
+
+    fs.rename_entry("/source/file", "/destination/renamed");
+    CHECK(throws<out_of_range>([&] { fs.resolve_path("/source/file"); }));
+    CHECK(fs.resolve_path("/destination/renamed") == file);
+    CHECK(fs.read_file("/destination/renamed") == "data");
+
+    fs.rename_entry("/destination/renamed", "/destination/final");
+    CHECK(fs.resolve_path("/destination/final") == file);
+    CHECK(throws<logic_error>(
+        [&] { fs.rename_entry("/destination/final", "/source"); }));
+
+    const uint32_t child = fs.make_directory("/source/child");
+    fs.rename_entry("/source/child", "/destination/moved");
+    CHECK(fs.resolve_path("/destination/moved") == child);
+    CHECK(fs.resolve_path("/destination/moved/..") == destination_dir);
+    CHECK(fs.read_inode(source_dir).link_count == 2);
+    CHECK(fs.read_inode(destination_dir).link_count == 3);
+    CHECK(throws<invalid_argument>(
+        [&] { fs.rename_entry("/destination", "/destination/nested"); }));
+}
+
 } // namespace
 
 int main() {
@@ -329,6 +476,12 @@ int main() {
         {"format rejects tiny disk", test_format_rejects_tiny_disk},
         {"100 MB layout", test_large_disk_layout},
         {"directories and paths", test_directories_and_paths},
+        {"create file", test_create_file},
+        {"write file", test_write_file},
+        {"read file", test_read_file},
+        {"remove file", test_remove_file},
+        {"remove directory", test_remove_directory},
+        {"rename entry", test_rename_entry},
     };
 
     for (const auto& test : tests) {

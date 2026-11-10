@@ -70,6 +70,12 @@ public:
     string working_directory_path();
     void change_directory(const string& path);
     uint32_t make_directory(const string& path, uint16_t mode = 0755);
+    uint32_t create_file(const string& path, uint16_t mode = 0644);
+    void write_file(const string& path, const string& content);
+    string read_file(const string& path);
+    void remove_file(const string& path);
+    void remove_directory(const string& path);
+    void rename_entry(const string& old_path, const string& new_path);
 
 private:
     void create_root_directory();

@@ -4,6 +4,7 @@
 #include "minifs/virtual_disk.hpp"
 
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -43,6 +44,12 @@ void print_help(ostream& output) {
            << "  cd <path>  Change the current directory\n"
            << "  ls [path]  List a directory\n"
            << "  mkdir <path> Create a directory\n"
+           << "  touch <path> Create an empty file\n"
+           << "  write <path> <text> Write text to a file\n"
+           << "  cat <path>  Print file contents\n"
+           << "  rm <path>   Remove a file\n"
+           << "  rmdir <path> Remove an empty directory\n"
+           << "  rename <old> <new> Rename or move an entry\n"
            << "  exit       Exit MiniFS\n";
 }
 
@@ -165,6 +172,44 @@ void Cli::run(istream& input, ostream& output) {
                     throw invalid_argument("Usage: mkdir <path>");
                 }
                 fs.make_directory(path);
+            } else if (name == "touch") {
+                string path;
+                if (!(command_stream >> path)) {
+                    throw invalid_argument("Usage: touch <path>");
+                }
+                fs.create_file(path);
+            } else if (name == "write") {
+                string path;
+                string content;
+                if (!(command_stream >> path >> quoted(content))) {
+                    throw invalid_argument("Usage: write <path> \"<text>\"");
+                }
+                fs.write_file(path, content);
+            } else if (name == "cat") {
+                string path;
+                if (!(command_stream >> path)) {
+                    throw invalid_argument("Usage: cat <path>");
+                }
+                output << fs.read_file(path) << '\n';
+            } else if (name == "rm") {
+                string path;
+                if (!(command_stream >> path)) {
+                    throw invalid_argument("Usage: rm <path>");
+                }
+                fs.remove_file(path);
+            } else if (name == "rmdir") {
+                string path;
+                if (!(command_stream >> path)) {
+                    throw invalid_argument("Usage: rmdir <path>");
+                }
+                fs.remove_directory(path);
+            } else if (name == "rename") {
+                string old_path;
+                string new_path;
+                if (!(command_stream >> old_path >> new_path)) {
+                    throw invalid_argument("Usage: rename <old> <new>");
+                }
+                fs.rename_entry(old_path, new_path);
             } else if (name == "exit" || name == "quit") {
                 break;
             } else if (!name.empty()) {
