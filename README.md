@@ -1,6 +1,6 @@
 # MiniFS – Mini File System Simulator
 
-Operating Systems project, Section H — Muhammad Talha, Abdul Rafiu, Muhammad Usman.
+Operating Systems project, Section H — Muhammad Talha, Usman Shah, Abdul Rafiu.
 
 MiniFS is a block-based file system that lives inside one binary file,
 `virtual_disk.bin`, which acts as a virtual disk. It has its own superblock,
@@ -25,41 +25,72 @@ restarts, and a simulated power cut is recovered from the journal.
 | Comparison | `bench` runs one workload under all three allocation modes |
 | Export | `export` writes `disk_state.json` (block map, inodes, stats) for a visualizer |
 
-## Build
+## How to run the project
 
-Requirements: CMake 3.16+ and a C++17 compiler (GCC 8+, Clang, or MSVC 2019+).
+The steps below are for Windows (PowerShell or cmd). On Linux or macOS the
+commands are the same except that the program is `./build/minifs` and paths
+use `/` instead of `\`. Run every command from the project folder.
 
-```bash
+### Step 1 – Install the tools (once)
+
+| Tool | Needed for | Where to get it |
+|---|---|---|
+| CMake 3.16 or newer | Building | <https://cmake.org/download/> |
+| A C++17 compiler: GCC 8 or newer (MinGW-w64), or Visual Studio 2019+ with "Desktop development with C++" | Building | <https://winlibs.com/> or <https://visualstudio.microsoft.com/> |
+| Node.js 16 or newer | Web interface only | <https://nodejs.org/> |
+| Git (or GitHub Desktop) | Getting the code | <https://git-scm.com/> |
+
+Check that they work (the GCC version must be 8 or higher):
+
+```powershell
+cmake --version
+g++ --version
+node --version
+```
+
+### Step 2 – Get the code
+
+```powershell
+git clone https://github.com/Usman-Shah-Rashdi/OS-project.git
+cd OS-project
+```
+
+### Step 3 – Build
+
+```powershell
 cmake -S . -B build
 cmake --build build
 ```
 
-**Windows note:** an old MinGW (for example the GCC 4.9 bundled with
-Code::Blocks) cannot compile C++17. If CMake picks it up, point it at a newer
-compiler, for example:
+The build is done when it finishes without `error` lines and
+`build\minifs.exe` exists. After changing any C++ code, run only
+`cmake --build build` again.
+
+- **Old compiler:** the GCC 4.9 that comes with Code::Blocks cannot compile
+  C++17. If CMake picks it up, delete the `build` folder and point CMake at a
+  newer compiler:
+  ```powershell
+  cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER="C:/path/to/mingw64/bin/g++.exe"
+  cmake --build build
+  ```
+- **Visual Studio:** the program is built as `build\Debug\minifs.exe`; use
+  that path in the steps below.
+- With MinGW the C++ runtime is linked in, so `minifs.exe` runs from any
+  terminal without extra DLLs.
+
+### Step 4 – Run MiniFS (command line)
 
 ```powershell
-cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER="C:/path/to/mingw64/bin/g++.exe"
-cmake --build build
+build\minifs.exe
 ```
 
-With MinGW the runtime is linked statically, so `minifs.exe` runs from any
-terminal (cmd or PowerShell) without extra DLLs on `PATH`. With a Visual Studio
-generator the program is in `build/Debug/minifs.exe`.
-
-## Run
-
-```bash
-./build/minifs                       # interactive shell on virtual_disk.bin
-./build/minifs scripts/demo.txt      # run a command script
-./build/minifs --disk other.bin      # use another disk image
-```
-
-On Windows: `build\minifs.exe`. The disk file is created in the folder you
-run MiniFS from.
+The first time, there is no disk yet, so create one with `format`. The disk is
+saved as `virtual_disk.bin` in the folder you started MiniFS from, and it is
+loaded again automatically next time.
 
 ```text
 minifs> format
+Formatted virtual_disk.bin: 100 MB, 25600 blocks of 4096 bytes, 6399 inodes, indexed allocation.
 minifs> createdir /docs
 minifs> goto /docs
 minifs> create notes.txt
@@ -68,8 +99,67 @@ minifs> read notes.txt
 Hello MiniFS
 minifs> list -l
 -rw-r--r--   1         12  2026-11-15 19:37:21  notes.txt
+minifs> help
 minifs> exit
 ```
+
+Type `help` for every command (also listed in [Commands](#commands) below).
+Other ways to start it:
+
+```powershell
+build\minifs.exe scripts\demo.txt        # run the commands in a script file
+build\minifs.exe --disk other.bin        # use (or create) a different disk file
+```
+
+### Step 5 – Run the demo
+
+The presentation demo formats a 16 MB disk and shows files, a large file with
+an indirect block, fragmentation and `defrag`, the allocation comparison,
+permissions and disk usage. The crash demo then interrupts a write and shows
+the journal recovering it on the next start.
+
+```powershell
+build\minifs.exe scripts\demo.txt
+build\minifs.exe scripts\demo_crash_1.txt
+build\minifs.exe scripts\demo_crash_2.txt
+```
+
+Note: `demo.txt` formats `virtual_disk.bin`, which erases what was on it.
+
+### Step 6 – Run the tests
+
+```powershell
+ctest --test-dir build --output-on-failure
+```
+
+Expected result: `100% tests passed out of 4` (the 30 unit tests, the
+all-commands script, and the two-part crash test).
+
+### Step 7 – Run the web interface
+
+Build MiniFS first (Step 3), then start the server:
+
+```powershell
+node gui\server.js
+```
+
+Open <http://localhost:3000> in Edge or Chrome. Keep the terminal open while
+you use the page, and press **Ctrl+C** in it to stop the server. If the page
+says the disk needs formatting, click **Format this disk…** or **New disk…**.
+More details are in [Web interface](#web-interface-minifs-explorer).
+
+### Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `cannot open output file minifs.exe: Permission denied` while building | MiniFS is still running. Type `exit` in it (or close that terminal), then build again. In PowerShell, `Stop-Process -Name minifs` also works. |
+| Errors about C++17 or `-std=c++17` while building | The compiler is too old. Delete the `build` folder and configure with a GCC 8+ compiler (see Step 3). |
+| `Disk uses MiniFS format version 1 ... Run 'format'` | The disk was made by an older MiniFS. Run `format` (this erases it), or delete `virtual_disk.bin`. |
+| `No file system is mounted. Run 'format' first.` | There is no disk in this folder yet. Run `format`, or start MiniFS from the project folder. |
+| The web page says it cannot reach the server | Start it with `node gui\server.js` and keep that terminal open. |
+| The server prints `MiniFS program not found` | Build MiniFS first (Step 3). |
+| Port 3000 is already in use | Use another port. PowerShell: `$env:PORT=3001; node gui\server.js`. cmd: `set PORT=3001` then `node gui\server.js`. Open `http://localhost:3001`. |
+| `$env:...` gives an error | That is PowerShell syntax; you are in cmd. Use the cmd form or open PowerShell. |
 
 ## Web interface (MiniFS Explorer)
 
