@@ -1,0 +1,7 @@
+# 7. Crash and recovery, part 1 (run after scripts\demo.txt).
+#   build\minifs.exe scripts\demo_crash_1.txt
+# The write below is committed to the journal, then the power is "cut"
+# before the change reaches the real blocks.
+read /docs/notes.txt
+crash after-commit
+write /docs/notes.txt "Saved during the crash and recovered by the journal"

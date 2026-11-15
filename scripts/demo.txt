@@ -1,0 +1,48 @@
+# MiniFS demo, following section 11 of the project plan (about 5 minutes).
+#   build\minifs.exe scripts\demo.txt
+# Then run the crash demo: scripts\demo_crash_1.txt and scripts\demo_crash_2.txt
+
+# 1. Format the disk and show the empty layout
+format 16
+diskinfo
+map
+
+# 2. Create directories and files and watch the blocks fill
+createdir /docs
+createdir /photos
+create /docs/notes.txt
+write /docs/notes.txt "Operating Systems project - MiniFS"
+fill /photos/a.jpg 12
+fill /photos/b.jpg 12
+fill /photos/c.jpg 12
+fill /photos/d.jpg 12
+list -l /photos
+map
+
+# 3. A large file that needs the single indirect block
+fill /docs/report.pdf 120
+info /docs/report.pdf
+
+# 4. Delete alternate files to make holes, then fill them and run frag
+delete /photos/a.jpg
+delete /photos/c.jpg
+fill /photos/big.png 40
+info /photos/big.png
+frag
+map
+defrag
+frag
+
+# 5. Allocation-mode comparison on the same workload
+bench
+
+# 6. Permissions: a read-only file refuses writes
+chmod 444 /docs/notes.txt
+list -l /docs
+write /docs/notes.txt "trying to change it"
+read /docs/notes.txt
+chmod 644 /docs/notes.txt
+
+# 8. Disk usage and a consistency check
+space
+check

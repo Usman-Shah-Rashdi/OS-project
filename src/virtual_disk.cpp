@@ -30,6 +30,7 @@ void VirtualDisk::format(size_t disk_size) {
         throw runtime_error("Unable to create virtual disk: " + path_);
     }
 
+    // Writing the last byte sizes the file; everything before it reads as 0.
     output.seekp(static_cast<streamoff>(disk_size - 1));
     const char empty_byte = '\0';
     output.write(&empty_byte, 1);
@@ -64,40 +65,80 @@ void VirtualDisk::open() {
 }
 
 void VirtualDisk::close() {
+    discard_buffer();
     if (file_.is_open()) {
         file_.flush();
         file_.close();
     }
+    file_.clear();
     block_count_ = 0;
 }
 
 vector<uint8_t> VirtualDisk::read_block(size_t block_number) {
     check_block_number(block_number);
+    if (buffering_) {
+        const auto found = buffer_.find(block_number);
+        if (found != buffer_.end()) {
+            return found->second;
+        }
+    }
 
     vector<uint8_t> data(block_size_);
     file_.seekg(static_cast<streamoff>(block_number * block_size_));
     file_.read(reinterpret_cast<char*>(data.data()),
                static_cast<streamsize>(data.size()));
     if (!file_) {
+        file_.clear();
         throw runtime_error("Unable to read virtual disk block.");
     }
     return data;
 }
 
-void VirtualDisk::write_block(size_t block_number,
-                              const vector<uint8_t>& data) {
+void VirtualDisk::write_block(size_t block_number, const vector<uint8_t>& data) {
     check_block_number(block_number);
-    if (data.size() != block_size_) {
-        throw invalid_argument("Block data must match the configured block size.");
+    check_block_data(data);
+    if (buffering_) {
+        buffer_[block_number] = data;
+        return;
     }
+    write_block_direct(block_number, data);
+}
+
+void VirtualDisk::write_block_direct(size_t block_number,
+                                     const vector<uint8_t>& data) {
+    check_block_number(block_number);
+    check_block_data(data);
+    buffer_.erase(block_number);
 
     file_.seekp(static_cast<streamoff>(block_number * block_size_));
     file_.write(reinterpret_cast<const char*>(data.data()),
                 static_cast<streamsize>(data.size()));
     file_.flush();
     if (!file_) {
+        file_.clear();
         throw runtime_error("Unable to write virtual disk block.");
     }
+}
+
+void VirtualDisk::begin_buffering() {
+    buffer_.clear();
+    buffering_ = true;
+}
+
+bool VirtualDisk::is_buffering() const {
+    return buffering_;
+}
+
+map<size_t, vector<uint8_t>> VirtualDisk::take_buffer() {
+    buffering_ = false;
+    map<size_t, vector<uint8_t>> blocks;
+    blocks.swap(buffer_);
+    return blocks;
+}
+
+void VirtualDisk::discard_buffer() {
+    buffering_ = false;
+    buffer_.clear();
 }
 
 bool VirtualDisk::is_open() const {
@@ -126,6 +167,12 @@ void VirtualDisk::check_block_number(size_t block_number) const {
     }
     if (block_number >= block_count_) {
         throw out_of_range("Virtual disk block number is out of range.");
+    }
+}
+
+void VirtualDisk::check_block_data(const vector<uint8_t>& data) const {
+    if (data.size() != block_size_) {
+        throw invalid_argument("Block data must match the configured block size.");
     }
 }
 

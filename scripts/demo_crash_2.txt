@@ -1,0 +1,5 @@
+# 7. Crash and recovery, part 2.
+#   build\minifs.exe scripts\demo_crash_2.txt
+# Mounting found the committed transaction in the journal and replayed it.
+read /docs/notes.txt
+check

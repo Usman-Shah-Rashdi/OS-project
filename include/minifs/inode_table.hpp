@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <cstdint>
 
-using namespace std;
 
 namespace minifs {
 

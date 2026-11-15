@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiniFS Explorer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="window">
+    <!-- Navigation: back, forward, up, address, refresh -->
+    <header class="navbar">
+      <button class="icon-btn" id="btn-back" title="Back (Alt+Left)" data-icon="back"></button>
+      <button class="icon-btn" id="btn-forward" title="Forward (Alt+Right)" data-icon="forward"></button>
+      <button class="icon-btn" id="btn-up" title="Up to parent folder (Backspace)" data-icon="up"></button>
+      <nav class="address" id="address" aria-label="Current folder"></nav>
+      <button class="icon-btn" id="btn-refresh" title="Refresh (F5)" data-icon="refresh"></button>
+    </header>
+
+    <!-- Commands -->
+    <div class="commandbar" role="toolbar">
+      <button class="cmd" id="btn-new-folder" data-icon="newFolder">New folder</button>
+      <button class="cmd" id="btn-new-file" data-icon="newFile">New file</button>
+      <span class="sep"></span>
+      <button class="cmd" id="btn-cut" title="Cut (Ctrl+X)" data-icon="cut">Cut</button>
+      <button class="cmd" id="btn-copy" title="Copy (Ctrl+C)" data-icon="copy">Copy</button>
+      <button class="cmd" id="btn-paste" title="Paste (Ctrl+V)" data-icon="paste">Paste</button>
+      <span class="sep"></span>
+      <button class="cmd" id="btn-rename" title="Rename (F2)" data-icon="rename">Rename</button>
+      <button class="cmd" id="btn-delete" title="Delete (Del)" data-icon="delete">Delete</button>
+      <button class="cmd" id="btn-properties" title="Properties (Alt+Enter)" data-icon="properties">Properties</button>
+      <span class="spacer"></span>
+      <button class="cmd" id="btn-format" title="Erase and format the disk" data-icon="drive">Format…</button>
+    </div>
+
+    <div class="body">
+      <!-- Folder tree and disk usage -->
+      <aside class="sidebar">
+        <div class="tree" id="tree"></div>
+        <div class="usage" id="usage"></div>
+      </aside>
+
+      <!-- File list -->
+      <main class="content" id="content">
+        <table class="list" id="list">
+          <thead>
+            <tr>
+              <th data-sort="name">Name</th>
+              <th data-sort="modified">Date modified</th>
+              <th data-sort="type">Type</th>
+              <th data-sort="size" class="num">Size</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <p class="empty" id="empty" hidden>This folder is empty.</p>
+        <section class="setup" id="setup" hidden></section>
+        <section class="disks-page" id="disks-page" hidden></section>
+      </main>
+    </div>
+
+    <footer class="statusbar">
+      <span id="status-left"></span>
+      <span id="status-right"></span>
+    </footer>
+  </div>
+
+  <div class="menu" id="menu" hidden></div>
+  <div class="backdrop" id="backdrop" hidden></div>
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

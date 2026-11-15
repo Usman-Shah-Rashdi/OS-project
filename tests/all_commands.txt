@@ -1,0 +1,168 @@
+# Runs every MiniFS command and the edge cases from the testing plan.
+# Used by ctest (cli_all_commands); run by hand with:
+#   build\minifs.exe --disk test.bin tests\all_commands.txt
+# Lines that start with '#' are comments. "Error:" lines below are expected.
+
+help
+version
+
+# --- format and layout --------------------------------------------------------
+format 4
+diskinfo
+space
+
+# --- directories and paths ----------------------------------------------------
+createdir /docs
+createdir /docs/notes
+mkdir /tmp
+where
+goto /docs/notes
+pwd
+goto ..
+where
+goto
+cd /docs/./notes/../..
+where
+list
+list -l /
+
+# --- files --------------------------------------------------------------------
+create /docs/a.txt
+touch /docs/b.txt
+write /docs/a.txt "Hello MiniFS"
+read /docs/a.txt
+write /docs/b.txt text without quotes keeps every word
+cat /docs/b.txt
+append /docs/a.txt " - appended"
+read /docs/a.txt
+write /docs/a.txt "line one\nline two"
+read /docs/a.txt
+info /docs/a.txt
+stat /docs
+
+# --- large file through the indirect block ------------------------------------
+fill /docs/big.bin 200
+info /docs/big.bin
+
+# --- copy, move, rename -------------------------------------------------------
+copy /docs/a.txt /tmp
+cp /docs/a.txt /tmp/copy.txt
+read /tmp/copy.txt
+move /tmp/copy.txt /docs/notes
+mv /docs/notes/copy.txt /docs/notes/moved.txt
+rename /docs/notes/moved.txt /docs/notes/renamed.txt
+list /docs/notes
+rename /tmp /docs/tmp
+list /docs
+
+# --- permissions --------------------------------------------------------------
+chmod 444 /docs/a.txt
+write /docs/a.txt "should fail"
+read /docs/a.txt
+chmod 200 /docs/a.txt
+read /docs/a.txt
+chmod 644 /docs/a.txt
+chmod 555 /docs/notes
+create /docs/notes/denied.txt
+chmod 644 /docs/notes
+list /docs/notes/renamed.txt
+read /docs/notes/renamed.txt
+chmod 755 /docs/notes
+list -l /docs
+
+# --- edge cases: every one of these must print an error -----------------------
+createdir /docs
+create /docs/a.txt
+createdir /missing/dir
+goto /docs/a.txt
+read /docs
+delete /docs
+deletedir /docs
+deletedir /docs/a.txt
+deletedir /
+goto /docs/notes
+deletedir /docs/notes
+goto /
+rename /docs /docs/tmp/inside
+create /this-name-is-far-too-long-for-a-minifs-directory-entry-xxxxxxxxx
+read /nope
+write /nope "x"
+chmod 9 /docs
+chmod 644
+format 0
+format 5000
+format 4 --alloc=sideways
+map x
+fill /docs/huge.bin 5000
+write "/docs/unterminated
+crash sometimes
+
+# --- deep nesting -------------------------------------------------------------
+createdir /n1
+createdir /n1/n2
+createdir /n1/n2/n3
+createdir /n1/n2/n3/n4
+createdir /n1/n2/n3/n4/n5
+createdir /n1/n2/n3/n4/n5/n6
+goto /n1/n2/n3/n4/n5/n6
+where
+goto /
+
+# --- delete things ------------------------------------------------------------
+delete /docs/b.txt
+rm /docs/tmp/a.txt
+deletedir /docs/tmp
+rmdir /n1/n2/n3/n4/n5/n6
+list /docs
+
+# --- inspection ---------------------------------------------------------------
+frag
+map
+map 0 40
+export
+export cli_state.json
+export on
+create /docs/exported.txt
+export off
+check
+fsck
+
+# --- defrag -------------------------------------------------------------------
+fill /docs/f1 16
+fill /docs/f2 16
+fill /docs/f3 16
+delete /docs/f2
+fill /docs/f4 40
+frag
+defrag
+frag
+check
+
+# --- disk full and inode exhaustion on a tiny disk ----------------------------
+format 1
+fill /a 400
+fill /b 400
+fill /c 400
+space
+check
+
+# --- allocation modes ---------------------------------------------------------
+format 2 --alloc=contiguous
+fill /c1 40
+fill /c2 40
+info /c2
+check
+format 2 --alloc linked
+fill /l1 9
+info /l1
+read /l1
+check
+format 2 indexed
+diskinfo
+bench
+
+# --- persistence is covered by ctest cli_crash_* and the unit tests ----------
+crash off
+check
+# ALL-COMMANDS-DONE
+exit

@@ -1,231 +1,71 @@
+// MiniFS entry point.
+//
+//   minifs                     interactive shell on virtual_disk.bin
+//   minifs script.txt          run the commands in script.txt
+//   minifs --disk other.bin    use a different disk image
+
 #include "minifs/cli.hpp"
-#include "minifs/file_system.hpp"
-#include "minifs/fs_errors.hpp"
-#include "minifs/virtual_disk.hpp"
 
 #include <fstream>
-#include <iomanip>
 #include <iostream>
-#include <sstream>
-#include <stdexcept>
 #include <string>
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#define MINIFS_ISATTY _isatty
+#define MINIFS_FILENO _fileno
+#else
+#include <unistd.h>
+#define MINIFS_ISATTY isatty
+#define MINIFS_FILENO fileno
+#endif
+
 using namespace std;
-using namespace minifs;
 
-namespace minifs {
-
-namespace {
-
-// Tier 1 implementation roadmap:
-// 1. Create a VirtualDisk class that formats, opens, reads, and writes
-//    fixed-size blocks in virtual_disk.bin. [implemented]
-// 2. Add a Superblock containing the disk signature, block size, total
-//    block count, metadata locations, and the root inode number. [implemented]
-// 3. Add a free-space bitmap so each data block can be marked free or used.
-//    [implemented]
-// 4. Add an inode table for file metadata such as type, size, permissions,
-//    timestamps, and references to allocated data blocks. [implemented]
-// 5. Create the root directory [implemented] and support path lookup from
-//    that inode.
-// 6. Connect the first commands to the file-system layer:
-//    format, mkdir, ls, touch, write, cat, and rm.
-//
-// Keep storage, metadata, and command parsing in separate classes. The CLI
-// should translate user input into file-system operations instead of managing
-// disk blocks directly.
-
-void print_help(ostream& output) {
-    output << "Available commands:\n"
-           << "  help       Show this help message\n"
-           << "  version    Show the MiniFS version\n"
-           << "  format [MB] Create or reset virtual_disk.bin (default: 100 MB)\n"
-           << "  diskinfo   Show the disk layout and free space\n"
-           << "  pwd        Print the current directory\n"
-           << "  cd <path>  Change the current directory\n"
-           << "  ls [path]  List a directory\n"
-           << "  mkdir <path> Create a directory\n"
-           << "  touch <path> Create an empty file\n"
-           << "  write <path> <text> Write text to a file\n"
-           << "  cat <path>  Print file contents\n"
-           << "  rm <path>   Remove a file\n"
-           << "  rmdir <path> Remove an empty directory\n"
-           << "  rename <old> <new> Rename or move an entry\n"
-           << "  exit       Exit MiniFS\n";
-}
-
-bool file_exists(const string& path) {
-    return ifstream(path, ios::binary).good();
-}
-
-void print_disk_info(const FileSystem& fs, ostream& output) {
-    const Superblock& sb = fs.superblock();
-    // e.g. "blocks 2-21 (20 blocks" or "block 1 (1 block"
-    const auto range = [](uint32_t first, uint32_t count) {
-        if (count == 1) {
-            return "block " + to_string(first) + " (1 block";
-        }
-        return "blocks " + to_string(first) + "-" +
-               to_string(first + count - 1) + " (" + to_string(count) +
-               " blocks";
-    };
-
-    output << "Path: " << fs.disk().path() << '\n'
-           << "Disk size: " << fs.disk().disk_size() / (1024 * 1024) << " MB ("
-           << sb.total_blocks << " blocks x " << sb.block_size << " bytes)\n"
-           << "Layout:\n"
-           << "  Superblock    block " << kSuperblockBlock << '\n'
-           << "  Free bitmap   " << range(sb.bitmap_start, sb.bitmap_blocks)
-           << ")\n"
-           << "  Inode table   "
-           << range(sb.inode_table_start, sb.inode_table_blocks) << ", "
-           << sb.inode_count << " inodes)\n"
-           << "  Data blocks   " << range(sb.data_start, sb.data_block_count)
-           << ")\n"
-           << "Free data blocks: " << sb.free_block_count << " / "
-           << sb.data_block_count << '\n'
-           << "Free inodes: " << sb.free_inode_count << " / "
-           << sb.inode_count - 1 << '\n'
-           << "Root inode: " << sb.root_inode << '\n'
-           << "Allocation mode: "
-           << allocation_mode_name(static_cast<AllocationMode>(sb.allocation_mode))
-           << '\n';
-}
-
-} // namespace
-
-void Cli::run(istream& input, ostream& output) {
-    output << "MiniFS 0.1.0\n"
-           << "Type 'help' for available commands.\n";
-
-    VirtualDisk disk("virtual_disk.bin");
-    FileSystem fs(disk);
-    if (file_exists(disk.path())) {
-        try {
-            fs.mount();
-            output << "Mounted " << disk.path() << ".\n";
-        } catch (const exception& error) {
-            fs.unmount();
-            output << "Could not mount " << disk.path() << ": " << error.what()
-                   << '\n';
-        }
-    } else {
-        output << "No virtual disk found. Run 'format' to create one.\n";
-    }
-
-    string command;
-    while (output << "minifs> " && getline(input, command)) {
-        istringstream command_stream(command);
-        string name;
-        command_stream >> name;
-
-        try {
-            if (name == "help") {
-                print_help(output);
-            } else if (name == "version") {
-                output << "MiniFS 0.1.0\n";
-            } else if (name == "format") {
-                size_t size_in_mb = 100;
-                string extra_argument;
-                if (command_stream >> extra_argument) {
-                    size_in_mb = stoull(extra_argument);
-                }
-                if (size_in_mb == 0) {
-                    throw invalid_argument("Disk size must be greater than zero.");
-                }
-
-                fs.format(size_in_mb * 1024ULL * 1024ULL);
-                output << "Formatted " << disk.path() << " ("
-                       << size_in_mb << " MB, " << fs.superblock().total_blocks
-                       << " blocks, " << fs.superblock().inode_count
-                       << " inodes).\n";
-            } else if (name == "diskinfo") {
-                if (!fs.is_mounted()) {
-                    if (!file_exists(disk.path())) {
-                        throw NotMountedError();
-                    }
-                    fs.mount();
-                }
-                print_disk_info(fs, output);
-            } else if (name == "pwd") {
-                output << fs.working_directory_path() << '\n';
-            } else if (name == "cd") {
-                string path;
-                if (!(command_stream >> path)) {
-                    throw invalid_argument("Usage: cd <path>");
-                }
-                fs.change_directory(path);
-            } else if (name == "ls") {
-                string path;
-                command_stream >> path;
-                const uint32_t directory =
-                    path.empty() ? fs.current_directory() : fs.resolve_path(path);
-                for (const DirEntry& entry : fs.list_directory(directory)) {
-                    if (entry.inode != kNullInode &&
-                        string(entry.name) != "." &&
-                        string(entry.name) != "..") {
-                        output << entry.name << '\n';
-                    }
-                }
-            } else if (name == "mkdir") {
-                string path;
-                if (!(command_stream >> path)) {
-                    throw invalid_argument("Usage: mkdir <path>");
-                }
-                fs.make_directory(path);
-            } else if (name == "touch") {
-                string path;
-                if (!(command_stream >> path)) {
-                    throw invalid_argument("Usage: touch <path>");
-                }
-                fs.create_file(path);
-            } else if (name == "write") {
-                string path;
-                string content;
-                if (!(command_stream >> path >> quoted(content))) {
-                    throw invalid_argument("Usage: write <path> \"<text>\"");
-                }
-                fs.write_file(path, content);
-            } else if (name == "cat") {
-                string path;
-                if (!(command_stream >> path)) {
-                    throw invalid_argument("Usage: cat <path>");
-                }
-                output << fs.read_file(path) << '\n';
-            } else if (name == "rm") {
-                string path;
-                if (!(command_stream >> path)) {
-                    throw invalid_argument("Usage: rm <path>");
-                }
-                fs.remove_file(path);
-            } else if (name == "rmdir") {
-                string path;
-                if (!(command_stream >> path)) {
-                    throw invalid_argument("Usage: rmdir <path>");
-                }
-                fs.remove_directory(path);
-            } else if (name == "rename") {
-                string old_path;
-                string new_path;
-                if (!(command_stream >> old_path >> new_path)) {
-                    throw invalid_argument("Usage: rename <old> <new>");
-                }
-                fs.rename_entry(old_path, new_path);
-            } else if (name == "exit" || name == "quit") {
-                break;
-            } else if (!name.empty()) {
-                output << "Unknown command: " << name << '\n';
-            }
-        }
-        catch (const exception& error) {
-            output << "Error: " << error.what() << '\n';
+int main(int argc, char** argv) {
+    minifs::Cli::Options options;
+    string script;
+    for (int i = 1; i < argc; ++i) {
+        const string arg = argv[i];
+        if (arg == "--disk" && i + 1 < argc) {
+            options.disk_path = argv[++i];
+        } else if (arg == "--quiet") {
+            options.quiet = true;
+        } else if (arg == "-h" || arg == "--help") {
+            cout << "Usage: minifs [--disk FILE] [--quiet] [SCRIPT]\n"
+                 << "  --disk FILE  disk image to use (default: virtual_disk.bin)\n"
+                 << "  --quiet      no banner or prompt; errors go to stderr (for programs)\n"
+                 << "  SCRIPT       text file with one command per line\n";
+            return 0;
+        } else if (script.empty() && arg.rfind("--", 0) != 0) {
+            script = arg;
+        } else {
+            cerr << "Unknown argument: " << arg << " (try --help)\n";
+            return 1;
         }
     }
-}
 
-} // namespace minifs
+#ifdef _WIN32
+    if (options.quiet) {
+        // Programs reading our output need the exact bytes of a file, so do
+        // not let Windows turn "\n" into "\r\n".
+        _setmode(_fileno(stdout), _O_BINARY);
+    }
+#endif
 
-int main() {
-    Cli cli;
-    cli.run(cin, cout);
-    return 0;
+    if (!script.empty()) {
+        ifstream file(script);
+        if (!file) {
+            cerr << "Cannot open script: " << script << '\n';
+            return 1;
+        }
+        options.echo = true;
+        return minifs::Cli(options).run(file, cout);
+    }
+
+    // When input is piped or redirected, show each command after the prompt
+    // so the output reads like a terminal session.
+    options.echo = !MINIFS_ISATTY(MINIFS_FILENO(stdin));
+    return minifs::Cli(options).run(cin, cout);
 }

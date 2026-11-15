@@ -3,45 +3,63 @@
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
-using namespace std;
-
 namespace minifs {
 
+// The disk layer: fixed-size blocks stored in one host file.
+//
+// While buffering is on (during a journaled transaction), write_block() keeps
+// blocks in memory instead of writing them, and read_block() returns the
+// buffered copy if there is one. write_block_direct() always goes straight to
+// the file; it is used for blocks that no committed metadata points at yet.
 class VirtualDisk {
 public:
-    static constexpr size_t DefaultDiskSize = 100ULL * 1024 * 1024;
-    static constexpr size_t DefaultBlockSize = 4096;
+    static constexpr std::size_t DefaultDiskSize = 100ULL * 1024 * 1024;
+    static constexpr std::size_t DefaultBlockSize = 4096;
 
-    explicit VirtualDisk(string path,
-                         size_t block_size = DefaultBlockSize);
+    explicit VirtualDisk(std::string path,
+                         std::size_t block_size = DefaultBlockSize);
     ~VirtualDisk();
 
     VirtualDisk(const VirtualDisk&) = delete;
     VirtualDisk& operator=(const VirtualDisk&) = delete;
 
-    void format(size_t disk_size = DefaultDiskSize);
+    void format(std::size_t disk_size = DefaultDiskSize);
     void open();
     void close();
 
-    vector<uint8_t> read_block(size_t block_number);
-    void write_block(size_t block_number, const vector<uint8_t>& data);
+    std::vector<std::uint8_t> read_block(std::size_t block_number);
+    void write_block(std::size_t block_number,
+                     const std::vector<std::uint8_t>& data);
+    void write_block_direct(std::size_t block_number,
+                            const std::vector<std::uint8_t>& data);
+
+    void begin_buffering();
+    bool is_buffering() const;
+    // Stops buffering and returns the buffered blocks, ordered by block number.
+    std::map<std::size_t, std::vector<std::uint8_t>> take_buffer();
+    // Stops buffering and forgets the buffered blocks.
+    void discard_buffer();
 
     bool is_open() const;
-    size_t block_size() const;
-    size_t block_count() const;
-    size_t disk_size() const;
-    const string& path() const;
+    std::size_t block_size() const;
+    std::size_t block_count() const;
+    std::size_t disk_size() const;
+    const std::string& path() const;
 
 private:
-    void check_block_number(size_t block_number) const;
+    void check_block_number(std::size_t block_number) const;
+    void check_block_data(const std::vector<std::uint8_t>& data) const;
 
-    string path_;
-    fstream file_;
-    size_t block_size_;
-    size_t block_count_ = 0;
+    std::string path_;
+    std::fstream file_;
+    std::size_t block_size_;
+    std::size_t block_count_ = 0;
+    bool buffering_ = false;
+    std::map<std::size_t, std::vector<std::uint8_t>> buffer_;
 };
 
 } // namespace minifs

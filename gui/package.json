@@ -1,0 +1,13 @@
+{
+  "name": "minifs-explorer",
+  "version": "1.0.0",
+  "description": "Simple web file explorer for the MiniFS virtual disk",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

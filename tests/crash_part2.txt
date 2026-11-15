@@ -1,0 +1,4 @@
+# Crash test, run 2 of 2: mounting replayed the committed transaction, so the
+# file must hold the new text and fsck must find nothing wrong.
+read /docs/report.txt
+check

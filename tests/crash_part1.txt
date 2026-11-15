@@ -1,0 +1,10 @@
+# Crash test, run 1 of 2: create a file, then crash after the journal commit
+# while overwriting it. Run 2 (crash_part2.txt) must replay the journal.
+format 4
+createdir /docs
+create /docs/report.txt
+write /docs/report.txt "Version 1"
+crash after-commit
+write /docs/report.txt "Version 2 survived the crash"
+# Never reached: MiniFS stops at the crash.
+read /docs/report.txt
